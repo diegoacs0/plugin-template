@@ -19,19 +19,28 @@
   "workspaces": [
     "packages/*"
   ],
+  "pnpm": {
+    "overrides": {
+      "bcrypt": "npm:bcryptjs@2.4.3"
+    }
+  },
   "devDependencies": {
+    "@nestjs/graphql": "~13.1.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
     "@graphql-codegen/cli": "^5.0.2",
     "@graphql-codegen/typed-document-node": "^5.0.9",
     "@graphql-codegen/typescript": "^4.0.9",
     "@graphql-codegen/typescript-operations": "^4.2.3",
     "@swc/core": "^1.7.1",
-    "@vendure/admin-ui-plugin": "3.0.0",
-    "@vendure/asset-server-plugin": "3.0.0",
-    "@vendure/cli": "^3.0.0",
-    "@vendure/core": "3.0.0",
-    "@vendure/testing": "3.0.0",
-    "@vendure/ui-devkit": "3.0.0",
-    "better-sqlite3": "^9.6.0",
+    "@vendure/asset-server-plugin": "^3.5.5",
+    "@vendure/cli": "^3.5.5",
+    "@vendure/core": "^3.5.5",
+    "@vendure/dashboard": "^3.5.5",
+    "@vendure/testing": "^3.5.5",
+    "@vendure-io/design-tokens": "^1.1.0",
+    "@vendure-io/ui": "^1.0.2",
+    "sql.js": "^1.13.0",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.5",
     "fs-extra": "^11.2.0",
@@ -40,7 +49,8 @@
     "prettier": "3.3.3",
     "rimraf": "^6.0.1",
     "ts-node": "10.9.2",
-    "typescript": "5.3.3",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
     "unplugin-swc": "^1.5.1",
     "vitest": "^2.0.4"
   }

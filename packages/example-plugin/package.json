@@ -15,9 +15,14 @@
     "types": "./dist/index.d.ts",
     "scripts": {
         "dev": "ts-node dev-server/index.ts",
+        "dashboard:dev": "vite --config dev-server/vite.config.mts",
+        "dashboard:build": "vite build --config dev-server/vite.config.mts",
         "codegen": "ts-node generate-types.ts",
-        "build": "rimraf dist && tsc -p ./tsconfig.build.json && ts-node copy-ui-src.ts",
+        "build": "rimraf dist && tsc -p ./tsconfig.build.json",
         "e2e": "cross-env PACKAGE=example-plugin vitest -c ../../utils/e2e/vitest.config.mts"
     },
-    "dependencies": {}
+    "dependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    }
 }

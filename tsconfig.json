@@ -8,15 +8,16 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "target": "es2022",
+    "jsx": "react-jsx",
     "strict": true,
     "sourceMap": false,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": ["node", "react", "react-dom"],
     "declaration": true,
     "strictPropertyInitialization": false,
-    "outDir": "dist",
+    "outDir": "dist"
   },
   "include": [
     "packages/example-plugin/src/"
-  ],
+  ]
 }
