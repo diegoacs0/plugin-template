@@ -24,6 +24,10 @@
       "bcrypt": "npm:bcryptjs@2.4.3"
     }
   },
+  "dependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    },
   "devDependencies": {
     "@nestjs/graphql": "~13.1.0",
     "@types/react": "^19.2.2",
