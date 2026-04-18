@@ -22,6 +22,7 @@ import { DigitalKeyService } from './services/digital-key.service';
 import { DigitalMediaService } from './services/digital-media.service';
 import { DigitalOrderService } from './services/digital-order.service';
 import { DigitalOrderNotificationHandler } from './services/digital-order-notification.handler';
+import { DigitalVariantStockService } from './services/digital-variant-stock.service';
 
 // Config strategies
 import { digitalFulfillmentHandler } from './config/digital-fulfillment-handler';
@@ -78,6 +79,7 @@ import { digitalOrderProcess } from './config/digital-order-process';
         DigitalKeyService,
         DigitalMediaService,
         DigitalOrderService,
+        DigitalVariantStockService,
         DigitalOrderNotificationHandler,
     ],
     adminApiExtensions: {

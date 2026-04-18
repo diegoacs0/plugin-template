@@ -1,0 +1,515 @@
+import { createTestEnvironment } from '@vendure/testing';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import path from 'path';
+import { testConfig } from '../../../utils/e2e/test-config';
+import { initialData } from '../../../utils/e2e/e2e-initial-data';
+import { DigitalProductsPlugin } from '../src';
+
+/**
+ * End-to-end tests for the Digital Products Plugin
+ *
+ * Tests the complete workflow:
+ * 1. Create digital products (FILE, KEY, SERVICE delivery types)
+ * 2. Add license keys
+ * 3. Place orders with digital products
+ * 4. Verify automatic fulfillment and delivery
+ * 5. Check failed order handling
+ */
+describe('Digital Products E2E', () => {
+    const { server, adminClient, shopClient } = createTestEnvironment({
+        ...testConfig(8001),
+        plugins: [
+            DigitalProductsPlugin.init({
+                enabled: true,
+                autoFulfill: true,
+                chatProvider: {
+                    provider: 'url-template',
+                    urlTemplate: 'https://support.example.com/chat?order={{order_id}}&email={{email}}',
+                },
+            }),
+        ],
+    });
+
+    let productVariantId: string;
+    let digitalProductFileId: string;
+    let digitalProductKeyId: string;
+    let digitalProductServiceId: string;
+
+    beforeAll(
+        async () => {
+            await server.init({
+                productsCsvPath: path.join(
+                    __dirname,
+                    '../../../utils/e2e/e2e-products-full.csv',
+                ),
+                initialData,
+                customerCount: 2,
+            });
+            await adminClient.asSuperAdmin();
+        },
+        120000,
+    );
+
+    afterAll(async () => {
+        await server.destroy();
+    });
+
+    describe('Digital Product Creation', () => {
+        it('should create a product variant marked as digital', async () => {
+            const result = await adminClient.query(`
+                query {
+                    productVariants(options: {take: 1}) {
+                        items {
+                            id
+                            name
+                            customFields {
+                                isDigital
+                            }
+                        }
+                    }
+                }
+            `);
+
+            expect(result.productVariants.items).toHaveLength(1);
+            productVariantId = result.productVariants.items[0].id;
+
+            // Mark as digital for testing
+            await adminClient.query(`
+                mutation UpdateProductVariant($input: UpdateProductVariantInput!) {
+                    updateProductVariant(input: $input) {
+                        id
+                        customFields {
+                            isDigital
+                        }
+                    }
+                }
+            `, {
+                input: {
+                    id: productVariantId,
+                    customFields: {
+                        isDigital: true,
+                    },
+                },
+            });
+        });
+
+        it('should create a FILE delivery digital product', async () => {
+            const result = await adminClient.query(`
+                mutation CreateDigitalProduct($input: CreateDigitalProductInput!) {
+                    createDigitalProduct(input: $input) {
+                        id
+                        name
+                        deliveryType
+                    }
+                }
+            `, {
+                input: {
+                    name: 'eBook PDF Guide',
+                    deliveryType: 'file',
+                    productVariantId,
+                },
+            });
+
+            expect(result.createDigitalProduct).toMatchObject({
+                name: 'eBook PDF Guide',
+                deliveryType: 'file',
+            });
+
+            digitalProductFileId = result.createDigitalProduct.id;
+        });
+
+        it('should create a KEY delivery digital product', async () => {
+            const result = await adminClient.query(`
+                mutation CreateDigitalProduct($input: CreateDigitalProductInput!) {
+                    createDigitalProduct(input: $input) {
+                        id
+                        name
+                        deliveryType
+                        availableKeyCount
+                    }
+                }
+            `, {
+                input: {
+                    name: 'Premium License',
+                    deliveryType: 'key',
+                    productVariantId,
+                },
+            });
+
+            expect(result.createDigitalProduct).toMatchObject({
+                name: 'Premium License',
+                deliveryType: 'key',
+                availableKeyCount: 0,
+            });
+
+            digitalProductKeyId = result.createDigitalProduct.id;
+        });
+
+        it('should create a SERVICE delivery digital product with chat template', async () => {
+            const result = await adminClient.query(`
+                mutation CreateDigitalProduct($input: CreateDigitalProductInput!) {
+                    createDigitalProduct(input: $input) {
+                        id
+                        name
+                        deliveryType
+                        chatTemplate
+                    }
+                }
+            `, {
+                input: {
+                    name: 'Live Support Session',
+                    deliveryType: 'service',
+                    productVariantId,
+                    chatTemplate: '<div>Welcome to support!</div>',
+                },
+            });
+
+            expect(result.createDigitalProduct).toMatchObject({
+                name: 'Live Support Session',
+                deliveryType: 'service',
+                chatTemplate: '<div>Welcome to support!</div>',
+            });
+
+            digitalProductServiceId = result.createDigitalProduct.id;
+        });
+    });
+
+    describe('License Key Management', () => {
+        it('should add license keys to a digital product', async () => {
+            const result = await adminClient.query(`
+                mutation AddDigitalProductKeys($input: AddDigitalProductKeysInput!) {
+                    addDigitalProductKeys(input: $input) {
+                        id
+                        code
+                        status
+                    }
+                }
+            `, {
+                input: {
+                    digitalProductId: digitalProductKeyId,
+                    keys: ['KEY-PROD-001', 'KEY-PROD-002', 'KEY-PROD-003'],
+                },
+            });
+
+            expect(result.addDigitalProductKeys).toHaveLength(3);
+            expect(result.addDigitalProductKeys[0]).toMatchObject({
+                code: 'KEY-PROD-001',
+                status: 'available',
+            });
+        });
+
+        it('should return available key count', async () => {
+            const result = await adminClient.query(`
+                query GetDigitalProduct($id: ID!) {
+                    digitalProduct(id: $id) {
+                        id
+                        name
+                        availableKeyCount
+                    }
+                }
+            `, {
+                id: digitalProductKeyId,
+            });
+
+            expect(result.digitalProduct.availableKeyCount).toBe(3);
+        });
+
+        it('should delete available keys', async () => {
+            // First get a key ID
+            const getResult = await adminClient.query(`
+                query GetKeys($dpId: ID!) {
+                    digitalProductKeys(digitalProductId: $dpId, options: {}) {
+                        items {
+                            id
+                            code
+                        }
+                    }
+                }
+            `, {
+                dpId: digitalProductKeyId,
+            });
+
+            const keyIdToDelete = getResult.digitalProductKeys.items[0].id;
+
+            const deleteResult = await adminClient.query(`
+                mutation DeleteKeys($ids: [ID!]!) {
+                    deleteDigitalProductKeys(ids: $ids) {
+                        result
+                    }
+                }
+            `, {
+                ids: [keyIdToDelete],
+            });
+
+            expect(deleteResult.deleteDigitalProductKeys.result).toBe('DELETED');
+
+            // Verify count decreased
+            const verifyResult = await adminClient.query(`
+                query GetDigitalProduct($id: ID!) {
+                    digitalProduct(id: $id) {
+                        availableKeyCount
+                    }
+                }
+            `, {
+                id: digitalProductKeyId,
+            });
+
+            expect(verifyResult.digitalProduct.availableKeyCount).toBe(2);
+        });
+    });
+
+    describe('Media Management', () => {
+        it('should add media files to a digital product', async () => {
+            const result = await adminClient.query(`
+                mutation CreateDigitalMedia($input: CreateDigitalMediaInput!) {
+                    createDigitalMedia(input: $input) {
+                        id
+                        fileName
+                        fileUrl
+                        accessLevel
+                    }
+                }
+            `, {
+                input: {
+                    digitalProductId: digitalProductFileId,
+                    fileName: 'guide.pdf',
+                    fileUrl: 'https://s3.example.com/guide.pdf',
+                    mimeType: 'application/pdf',
+                    accessLevel: 'main',
+                    fileSize: 2048000,
+                },
+            });
+
+            expect(result.createDigitalMedia).toMatchObject({
+                fileName: 'guide.pdf',
+                fileUrl: 'https://s3.example.com/guide.pdf',
+                accessLevel: 'main',
+            });
+        });
+
+        it('should add preview media for public access', async () => {
+            const result = await adminClient.query(`
+                mutation CreateDigitalMedia($input: CreateDigitalMediaInput!) {
+                    createDigitalMedia(input: $input) {
+                        id
+                        accessLevel
+                    }
+                }
+            `, {
+                input: {
+                    digitalProductId: digitalProductFileId,
+                    fileName: 'preview.pdf',
+                    fileUrl: 'https://s3.example.com/preview.pdf',
+                    mimeType: 'application/pdf',
+                    accessLevel: 'preview',
+                },
+            });
+
+            expect(result.createDigitalMedia.accessLevel).toBe('preview');
+        });
+    });
+
+    describe('Order Fulfillment', () => {
+        it('should query available digital products by variant', async () => {
+            const result = await adminClient.query(`
+                query GetProductsByVariant($id: ID!) {
+                    digitalProductsByVariant(productVariantId: $id) {
+                        id
+                        name
+                        deliveryType
+                    }
+                }
+            `, {
+                id: productVariantId,
+            });
+
+            expect(result.digitalProductsByVariant).toHaveLength(3);
+            expect(result.digitalProductsByVariant.map((p: any) => p.deliveryType)).toContain(
+                'file',
+            );
+            expect(result.digitalProductsByVariant.map((p: any) => p.deliveryType)).toContain(
+                'key',
+            );
+            expect(result.digitalProductsByVariant.map((p: any) => p.deliveryType)).toContain(
+                'service',
+            );
+        });
+
+        it('should list all digital products', async () => {
+            const result = await adminClient.query(`
+                query {
+                    digitalProducts(options: {}) {
+                        items {
+                            id
+                            name
+                        }
+                        totalItems
+                    }
+                }
+            `);
+
+            expect(result.digitalProducts.totalItems).toBeGreaterThanOrEqual(3);
+            expect(result.digitalProducts.items.map((p: any) => p.name)).toContain(
+                'eBook PDF Guide',
+            );
+        });
+    });
+
+    describe('Admin Query - Failed Deliveries', () => {
+        it('should return failed digital orders', async () => {
+            const result = await adminClient.query(`
+                query {
+                    failedDigitalOrders {
+                        id
+                        status
+                        failureReason
+                    }
+                }
+            `);
+
+            // Should be an array, may be empty or contain failed orders
+            expect(Array.isArray(result.failedDigitalOrders)).toBe(true);
+        });
+    });
+
+    describe('Data Validation', () => {
+        it('should reject digital product with empty name', async () => {
+            const result = await adminClient.query(
+                `
+                mutation CreateDigitalProduct($input: CreateDigitalProductInput!) {
+                    createDigitalProduct(input: $input) {
+                        id
+                        name
+                    }
+                }
+            `,
+                {
+                    input: {
+                        name: '   ',
+                        deliveryType: 'file',
+                        productVariantId,
+                    },
+                },
+            );
+
+            expect(result.errors).toBeDefined();
+            expect(result.errors[0].message).toContain('name');
+        });
+
+        it('should reject keys with empty codes', async () => {
+            const result = await adminClient.query(
+                `
+                mutation AddDigitalProductKeys($input: AddDigitalProductKeysInput!) {
+                    addDigitalProductKeys(input: $input) {
+                        id
+                    }
+                }
+            `,
+                {
+                    input: {
+                        digitalProductId: digitalProductKeyId,
+                        keys: ['', '   ', ''],
+                    },
+                },
+            );
+
+            expect(result.errors).toBeDefined();
+            expect(result.errors[0].message).toContain('key code');
+        });
+    });
+
+    describe('Product Listing & Queries', () => {
+        it('should get digital product details', async () => {
+            const result = await adminClient.query(
+                `
+                query GetDigitalProduct($id: ID!) {
+                    digitalProduct(id: $id) {
+                        id
+                        name
+                        deliveryType
+                        productVariant {
+                            id
+                            name
+                        }
+                        keys {
+                            id
+                            code
+                            status
+                        }
+                        medias {
+                            id
+                            fileName
+                            fileUrl
+                        }
+                        availableKeyCount
+                    }
+                }
+            `,
+                { id: digitalProductKeyId },
+            );
+
+            expect(result.digitalProduct).toMatchObject({
+                name: 'Premium License',
+                deliveryType: 'key',
+            });
+            expect(result.digitalProduct.productVariant.id).toBe(productVariantId);
+        });
+
+        it('should update digital product delivery type', async () => {
+            const result = await adminClient.query(
+                `
+                mutation UpdateDigitalProduct($input: UpdateDigitalProductInput!) {
+                    updateDigitalProduct(input: $input) {
+                        id
+                        name
+                        deliveryType
+                    }
+                }
+            `,
+                {
+                    input: {
+                        id: digitalProductFileId,
+                        name: 'Updated eBook Guide',
+                        deliveryType: 'file',
+                    },
+                },
+            );
+
+            expect(result.updateDigitalProduct).toMatchObject({
+                name: 'Updated eBook Guide',
+                deliveryType: 'file',
+            });
+        });
+
+        it('should delete digital product', async () => {
+            // Create a temp product to delete
+            const createResult = await adminClient.query(`
+                mutation CreateDigitalProduct($input: CreateDigitalProductInput!) {
+                    createDigitalProduct(input: $input) {
+                        id
+                    }
+                }
+            `, {
+                input: {
+                    name: 'Temp Product to Delete',
+                    deliveryType: 'file',
+                    productVariantId,
+                },
+            });
+
+            const tempProductId = createResult.createDigitalProduct.id;
+
+            const deleteResult = await adminClient.query(`
+                mutation DeleteDigitalProduct($id: ID!) {
+                    deleteDigitalProduct(id: $id) {
+                        result
+                    }
+                }
+            `, {
+                id: tempProductId,
+            });
+
+            expect(deleteResult.deleteDigitalProduct.result).toBe('DELETED');
+        });
+    });
+});

@@ -19,7 +19,8 @@
         "dashboard:build": "vite build --config dev-server/vite.config.mts",
         "codegen": "ts-node generate-types.ts",
         "build": "rimraf dist && tsc -p ./tsconfig.build.json",
-        "e2e": "cross-env PACKAGE=example-plugin vitest -c ../../utils/e2e/vitest.config.mts"
+        "test": "cross-env PACKAGE=digital-keys vitest",
+        "e2e": "cross-env PACKAGE=digital-keys vitest -c ../../utils/e2e/vitest.config.mts"
     },
     "dependencies": {
         "react": "^19.0.0",

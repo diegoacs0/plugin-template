@@ -18,6 +18,7 @@ import {
 import { In } from 'typeorm';
 import { PLUGIN_INIT_OPTIONS, loggerCtx } from '../constants';
 import { DigitalProduct } from '../entities/digital-product.entity';
+import { DigitalVariantStockService } from './digital-variant-stock.service';
 import {
     CreateDigitalProductInput,
     UpdateDigitalProductInput,
@@ -29,6 +30,7 @@ export class DigitalProductService {
     constructor(
         private connection: TransactionalConnection,
         private listQueryBuilder: ListQueryBuilder,
+        private digitalVariantStockService: DigitalVariantStockService,
         @Inject(PLUGIN_INIT_OPTIONS) private options: DigitalProductsPluginOptions,
     ) {}
 
@@ -125,6 +127,11 @@ export class DigitalProductService {
 
         const saved = await repository.save(newEntity);
 
+        await this.digitalVariantStockService.syncVariantStock(
+            ctx,
+            saved.productVariantId,
+        );
+
         Logger.info(`Created digital product "${saved.name}" (${saved.id})`, loggerCtx);
         return assertFound(this.findOne(ctx, saved.id));
     }
@@ -151,10 +158,18 @@ export class DigitalProductService {
             DigitalProduct,
             normalizedInput.id,
         );
+        const previousVariantId = entity.productVariantId;
         const updated = patchEntity(entity, normalizedInput);
         await this.connection
             .getRepository(ctx, DigitalProduct)
             .save(updated, { reload: false });
+
+        const variantIdsToSync = Array.from(
+            new Set([previousVariantId, updated.productVariantId].filter(Boolean)),
+        );
+        for (const variantId of variantIdsToSync) {
+            await this.digitalVariantStockService.syncVariantStock(ctx, variantId);
+        }
 
         return assertFound(this.findOne(ctx, updated.id));
     }
@@ -166,8 +181,10 @@ export class DigitalProductService {
             id,
             { relations: ['keys', 'medias'] },
         );
+        const variantId = entity.productVariantId;
         try {
             await this.connection.getRepository(ctx, DigitalProduct).remove(entity);
+            await this.digitalVariantStockService.syncVariantStock(ctx, variantId);
             Logger.info(`Deleted digital product "${entity.name}" (${id})`, loggerCtx);
             return { result: DeletionResult.DELETED };
         } catch (e: any) {

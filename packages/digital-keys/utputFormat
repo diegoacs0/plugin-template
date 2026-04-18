@@ -1,0 +1,13 @@
+HTTP/1.1 400 Bad Request
+X-Powered-By: Express
+Vary: Origin
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: vendure-auth-token
+Content-Type: application/json; charset=utf-8
+Content-Length: 158
+ETag: W/"9e-Stzg4MrHIH9QQBxz/PkCcf7i52w"
+Date: Thu, 26 Mar 2026 14:52:39 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"statusCode":400,"message":"Expected property name or '}' in JSON at position 1 (line 1 column 2)","timestamp":"2026-03-26T14:52:39.379Z","path":"/shop-api"}

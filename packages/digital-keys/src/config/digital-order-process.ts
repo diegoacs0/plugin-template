@@ -5,10 +5,10 @@ import {
     OrderService,
     TransactionalConnection,
 } from '@vendure/core';
+import { In } from 'typeorm';
 import { digitalFulfillmentHandler } from './digital-fulfillment-handler';
 import { DigitalProduct } from '../entities/digital-product.entity';
 import { DigitalOrderService } from '../services/digital-order.service';
-import { DigitalOrderStatus } from '../types';
 import { loggerCtx } from '../constants';
 
 let orderService: OrderService;
@@ -38,9 +38,40 @@ export const digitalOrderProcess: OrderProcess<string> = {
             const order = await orderService.findOne(data.ctx, data.order.id, ['lines', 'lines.productVariant']);
             if (!order) return;
 
-            const digitalOrderLines = order.lines.filter(
-                (l: any) => l.productVariant?.customFields?.isDigital,
+            const variantIds = Array.from(
+                new Set(
+                    order.lines
+                        .map((line: any) => line.productVariant?.id)
+                        .filter(Boolean),
+                ),
             );
+
+            const linkedDigitalProducts = variantIds.length
+                ? await connection
+                    .getRepository(data.ctx, DigitalProduct)
+                    .find({
+                        where: { productVariantId: In(variantIds) as any },
+                    })
+                : [];
+
+            const digitalProductsByVariant = new Map<string, DigitalProduct[]>();
+            for (const digitalProduct of linkedDigitalProducts) {
+                const key = String(digitalProduct.productVariantId);
+                const existing = digitalProductsByVariant.get(key) ?? [];
+                existing.push(digitalProduct);
+                digitalProductsByVariant.set(key, existing);
+            }
+
+            const digitalOrderLines = order.lines.filter((line: any) => {
+                const variantId = line.productVariant?.id;
+                if (!variantId) {
+                    return false;
+                }
+                const flaggedAsDigital = Boolean(line.productVariant?.customFields?.isDigital);
+                const hasLinkedDigitalProducts =
+                    (digitalProductsByVariant.get(String(variantId))?.length ?? 0) > 0;
+                return flaggedAsDigital || hasLinkedDigitalProducts;
+            });
 
             if (!digitalOrderLines.length) return;
 
@@ -57,11 +88,8 @@ export const digitalOrderProcess: OrderProcess<string> = {
                 }> = [];
 
                 for (const line of digitalOrderLines) {
-                    const dps = await connection
-                        .getRepository(data.ctx, DigitalProduct)
-                        .find({
-                            where: { productVariantId: line.productVariant.id },
-                        });
+                    const dps =
+                        digitalProductsByVariant.get(String(line.productVariant.id)) ?? [];
 
                     for (const dp of dps) {
                         digitalProductsToProcess.push({
@@ -83,17 +111,12 @@ export const digitalOrderProcess: OrderProcess<string> = {
                             ['lines', 'lines.productVariant', 'customer'],
                         ) ?? order;
 
-                        const savedDigitalOrder = await digitalOrderService.createForOrder(
+                        await digitalOrderService.createForOrder(
                             data.ctx,
                             order.id,
                             orderWithCustomer as any,
                             digitalProductsToProcess,
                         );
-
-                        // Only mark as fulfilled if it's not already failed
-                        if (savedDigitalOrder.status !== DigitalOrderStatus.FAILED) {
-                            await digitalOrderService.markFulfilled(data.ctx, savedDigitalOrder.id);
-                        }
                     }
                 }
 

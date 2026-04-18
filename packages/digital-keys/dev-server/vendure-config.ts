@@ -1,8 +1,28 @@
-import { DefaultSearchPlugin, VendureConfig } from '@vendure/core';
+import { DefaultSearchPlugin, PaymentMethodHandler, VendureConfig, LanguageCode } from '@vendure/core';
+import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import 'dotenv/config';
 import path from 'path';
 import { DigitalProductsPlugin } from '../src';
+
+/**
+ * Auto-approve payment handler for development / digital products.
+ * Immediately settles every payment — do NOT use in production.
+ */
+export const autoSettlePaymentHandler = new PaymentMethodHandler({
+    code: 'auto-settle',
+    description: [
+        { languageCode: LanguageCode.en, value: 'Auto-settle (dev / digital)' },
+    ],
+    args: {},
+    createPayment: (_ctx, _order, amount) => ({
+        amount,
+        state: 'Settled' as const,
+        transactionId: `auto-${Date.now()}`,
+        metadata: {},
+    }),
+    settlePayment: () => ({ success: true }),
+});
 
 const apiPort = process.env.API_PORT || 3000;
 
@@ -30,9 +50,13 @@ export const config: VendureConfig = {
         location: path.join(__dirname, 'vendure.sqlite'),
     },
     paymentOptions: {
-        paymentMethodHandlers: [],
+        paymentMethodHandlers: [autoSettlePaymentHandler],
     },
     plugins: [
+        AssetServerPlugin.init({
+            route: 'assets',
+            assetUploadDir: path.join(__dirname, 'static/assets'),
+        }),
         DefaultSearchPlugin.init({}),
         DigitalProductsPlugin.init({
             enabled: true,

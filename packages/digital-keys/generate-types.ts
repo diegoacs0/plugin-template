@@ -1,13 +1,13 @@
 import { generateTypes } from "../../utils/generate-types";
 import path from "path";
-import { ExamplePlugin } from "./src";
+import { DigitalProductsPlugin } from "./src";
 
 require("dotenv").config({ path: path.join(__dirname, "../dev-server/.env") });
 
 generateTypes(
   {
     plugins: [
-      ExamplePlugin.init({
+      DigitalProductsPlugin.init({
         enabled: true,
       }),
     ],

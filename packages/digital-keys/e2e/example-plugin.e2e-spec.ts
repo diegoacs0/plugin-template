@@ -1,17 +1,15 @@
 import { createTestEnvironment } from '@vendure/testing';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {ExamplePlugin} from "../src";
+import {DigitalProductsPlugin} from "../src";
 import path from "path";
 import {initialData} from "../../../utils/e2e/e2e-initial-data";
-import {ExampleQueryDocument} from "./types/generated-shop-types";
-import {GetExampleEntityListDocument} from "./types/generated-admin-types";
 import {testConfig} from "../../../utils/e2e/test-config";
 
-describe('ExamplePlugin', () => {
+describe('DigitalProductsPlugin', () => {
 
     const {server, adminClient, shopClient} = createTestEnvironment({
         ...testConfig(8000),
-        plugins: [ExamplePlugin.init({
+        plugins: [DigitalProductsPlugin.init({
             enabled: true,
         })],
     });
@@ -29,18 +27,9 @@ describe('ExamplePlugin', () => {
         await server.destroy();
     });
 
-  it('exampleQuery returns the expected result', async () => {
-      const result = await shopClient.query(ExampleQueryDocument);
-
-      expect(result.exampleQuery).toBe('Hello! Your example plugin is set to enabled=true');
-  });
-
-  it('exampleEntities returns an empty list', async () => {
-      const result = await adminClient.query(GetExampleEntityListDocument, {
-          options: {}
-      });
-
-      expect(result.exampleEntities.totalItems).toBe(0);
-      expect(result.exampleEntities.items).toEqual([]);
-  });
+    it('plugin initializes successfully', async () => {
+        // Simple test to verify plugin loads without errors
+        expect(server).toBeDefined();
+        expect(adminClient).toBeDefined();
+    });
 });

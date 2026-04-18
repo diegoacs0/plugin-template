@@ -237,6 +237,14 @@ export class DigitalOrderService {
                     `marked FAILED:\n${saved.failureReason}`,
                 loggerCtx,
             );
+        } else {
+            saved.status = DigitalOrderStatus.FULFILLED;
+            await repository.save(saved);
+
+            Logger.info(
+                `Digital order ${saved.id} for Vendure order ${orderId} marked FULFILLED`,
+                loggerCtx,
+            );
         }
 
         // ── Emit notification event (email + any other handler) ────────────────

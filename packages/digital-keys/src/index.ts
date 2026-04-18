@@ -38,6 +38,7 @@ export { DigitalProductService } from './services/digital-product.service';
 export { DigitalKeyService } from './services/digital-key.service';
 export { DigitalMediaService } from './services/digital-media.service';
 export { DigitalOrderService } from './services/digital-order.service';
+export { DigitalVariantStockService } from './services/digital-variant-stock.service';
 
 // ─── Config (for advanced customization) ─────────────────────────────────────
 export { digitalFulfillmentHandler } from './config/digital-fulfillment-handler';

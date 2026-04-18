@@ -15,6 +15,7 @@ import {
 import { In } from 'typeorm';
 import { PLUGIN_INIT_OPTIONS, loggerCtx } from '../constants';
 import { DigitalProductKey } from '../entities/digital-product-key.entity';
+import { DigitalVariantStockService } from './digital-variant-stock.service';
 import {
     KeyStatus,
     DigitalProductsPluginOptions,
@@ -25,6 +26,7 @@ export class DigitalKeyService {
     constructor(
         private connection: TransactionalConnection,
         private listQueryBuilder: ListQueryBuilder,
+        private digitalVariantStockService: DigitalVariantStockService,
         @Inject(PLUGIN_INIT_OPTIONS) private options: DigitalProductsPluginOptions,
     ) {}
 
@@ -121,6 +123,10 @@ export class DigitalKeyService {
             }),
         );
         const saved = await repository.save(entities);
+        await this.digitalVariantStockService.syncVariantStockFromDigitalProduct(
+            ctx,
+            normalizedProductId,
+        );
 
         Logger.info(
             `Added ${saved.length} keys to digital product ${digitalProductId}`,
@@ -174,9 +180,16 @@ export class DigitalKeyService {
             key.digitalOrderId = normalizedOrderId;
         }
 
-        return this.connection
+        const saved = await this.connection
             .getRepository(ctx, DigitalProductKey)
             .save(available);
+
+        await this.digitalVariantStockService.syncVariantStockFromDigitalProduct(
+            ctx,
+            normalizedProductId,
+        );
+
+        return saved;
     }
 
     /**
@@ -195,9 +208,22 @@ export class DigitalKeyService {
             key.digitalOrderId = null;
         }
 
-        return this.connection
+        const saved = await this.connection
             .getRepository(ctx, DigitalProductKey)
             .save(keys);
+
+        const digitalProductIds = Array.from(
+            new Set(keys.map(key => key.digitalProductId).filter(Boolean)),
+        );
+
+        for (const digitalProductId of digitalProductIds) {
+            await this.digitalVariantStockService.syncVariantStockFromDigitalProduct(
+                ctx,
+                digitalProductId,
+            );
+        }
+
+        return saved;
     }
 
     /**
@@ -212,9 +238,20 @@ export class DigitalKeyService {
                 .getRepository(ctx, DigitalProductKey)
                 .find({ where: { id: In(ids) as any, status: KeyStatus.AVAILABLE } });
 
+            const digitalProductIds = Array.from(
+                new Set(keys.map(key => key.digitalProductId).filter(Boolean)),
+            );
+
             await this.connection
                 .getRepository(ctx, DigitalProductKey)
                 .remove(keys);
+
+            for (const digitalProductId of digitalProductIds) {
+                await this.digitalVariantStockService.syncVariantStockFromDigitalProduct(
+                    ctx,
+                    digitalProductId,
+                );
+            }
 
             return { result: DeletionResult.DELETED };
         } catch (e: any) {
